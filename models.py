@@ -2,7 +2,7 @@ import logging
 
 from abc import ABC, abstractmethod
 from uuid import UUID
-from pydantic import BaseSettings, BaseModel PrivateAtribute
+from pydantic import BaseSettings, BaseModel, PrivateAttr
 from fastapi import Decimal
 
 class Payment(BaseModel):
@@ -26,16 +26,21 @@ class PaymentQueue(ABC, BaseSettings):
         pass
 
 
+class PaymentProcessorStatus(BaseModel):
+    failing: bool
+    minResponseTime: int
+
+
 class PaymentProcessor(ABC, BaseSettings):
     max_retries: int = 2
-    _logger: logging.Logger = PrivateAtribute(default_factory=lambda: logging.getLogger())
+    _logger: logging.Logger = PrivateAttr(default_factory=lambda: logging.getLogger())
 
     @abstractmethod
     async def execute(self):
         pass
 
     @abstractmethod
-    async def check_health(self)
+    async def check_health(self) -> PaymentProcessorStatus:
         pass
 
 
@@ -47,11 +52,6 @@ class PaymentProcessorSummary(BaseModel):
 class PaymentsSummary(BaseModel):
     default: PaymentProcessorSummary
     fallback: PaymentProcessorSummary
-
-
-class PaymentProcessorStatus(BaseModel):
-    failing: bool
-    minResponseTime: int
 
 
 class PaymentDatabase(BaseSettings, ABC):

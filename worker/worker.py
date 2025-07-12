@@ -1,9 +1,5 @@
-import random
-from pydantic import BaseSettings
-from redis.asyncio import Redis
-from models import PaymentQueue, PaymentProcessor, PaymentProcessorStatus
-
 import asyncio
+import logging
 
 from tenacity import (
     AsyncRetrying,
@@ -11,125 +7,116 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential_jitter,
 )
-import logging
-
+from pydantic import BaseModel, BaseSettings, Field
+from typing import Any, Callable, Awaitable, TypeVar
+from models import PaymentQueue, PaymentProcessor, PaymentProcessorStatus
 
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
+
 
 class ExecutorError(Exception):
     pass
 
 
+class Strategy(BaseModel):
+    take_from_top: bool
+    start_with_main: bool
 
-class Worker(BaseSettings):
-    queue: PaymentQueue
-    main: PaymentProcessor
-    fallback: PaymentProcessor
 
+class WorkerConfig(BaseSettings):
     main_attempts: int = 3
     fallback_attempts: int = 2
     base_delay: float = 0.3
-    max_delay: float = 2.5  
+    max_delay: float = 2.5
     per_try_timeout: float = 1.0
 
-    async def worker(self):
+    class Config:
+        env_prefix = "WORKER_"
+
+
+class Worker(BaseModel):
+    queue: PaymentQueue
+    main: PaymentProcessor
+    fallback: PaymentProcessor
+    cfg: WorkerConfig = Field(_default_factory=lambda: WorkerConfig())
+
+    class Config:
+        arbitraty_types = True
+
+    async def worker(self) -> None:
         while True:
-            
-            pegar_os_maiores = True
-            comecar_pelo_main_processor = True
+            try:
+                strategy = await self._determine_strategy()
+                payment = await self._get_next_payment(strategy)
+                await self._process_payment(payment, strategy)
+            except asyncio.CancelledError:
+                logger.info("Worker cancelado, encerrando loop.")
+                break
+            except Exception:
+                logger.exception("Erro inesperado no worker")
 
-            p1, p2 = await self.check_payments_health()
-
-            latencia_do_p1_ta_boa = p1.minResponseTime <= p2.minResponseTime * 1.2
-            main_ta_falhando = p1.failing
-
-            if not main_ta_falhando and latencia_do_p1_ta_boa:
-                pegar_os_maiores = True
-                comecar_pelo_main_processor = True
-
-            if not main_ta_falhando and not latencia_do_p1_ta_boa:
-                pegar_os_maiores = False
-                comecar_pelo_main_processor = False
-
-            if main_ta_falhando and latencia_do_p1_ta_boa:
-                pegar_os_maiores = False
-                comecar_pelo_main_processor = True
- 
-
-        pass
-
-    async def check_payments_health(self):
-        principal: PaymentProcessorStatus = await self.principal_processor.check_health()
-        fallback: PaymentProcessorStatus = await self.fallback_processor.check_health()
-
-        principal_status = not principal.failing and principal.minResponseTime <= fallback.minResponseTime * 1.2
-        fallback_status = not fallback.failing
-
-    async def default_run(self, task):
-        try:
-            return await self._tenacity_run(
-                operation=lambda: self._run_main(task),
-                attempts=self.main_attempts,
-                name="main",
-            )
-        except ExecutorError as e:
-            logger.warning(
-                "nain falhou após %d tentativas: %s — partindo para fallback", 
-                self.main_attempts, 
-                e
-            )
-
-        return await self._tenacity_run(
-            operation=lambda: self._run_fallback(task),
-            attempts=self.fallback_attempts,
-            name="fallback",
-        )
-    
-    async def fallback_run(self, task):
-        try:
-            return await self._tenacity_run(
-                operation=lambda: self._run_fallback(task),
-                attempts=self.main_attempts,
-                name="fallback",
-            )
-        except ExecutorError as e:
-            logger.warning(
-                "main não saúdavel e fallback falhou após %d tentativas: %s", 
-                self.main_attempts, 
-                e
-            )
-            raise e
+    async def _determine_strategy(self) -> Strategy:
+        p1, p2 = await self.check_payments_health()
         
+        main_ok = not p1.failing
+        latency_ok = p1.minResponseTime <= p2.minResponseTime * 1.2
 
-    async def _tenacity_run(self, operation, attempts: int, name: str):
+        if main_ok and latency_ok:
+            return Strategy(take_from_top=True, start_with_main=True)
+        
+        if main_ok and not latency_ok:
+            return Strategy(take_from_top=False, start_with_main=False)
+        
+        if not main_ok and latency_ok:
+            return Strategy(take_from_top=False, start_with_main=True)
+        
+        return Strategy(take_from_top=True, start_with_main=False)
+
+    async def _get_next_payment(self, strategy: Strategy) -> Any:
+        if strategy.take_from_top:
+            return await self.queue.get_from_top()
+        return await self.queue.get_from_bottom()
+
+    async def _process_payment(self, payment: Any, strategy: Strategy) -> None:
+        if strategy.start_with_main:
+            try:
+                await self._retry(
+                    lambda: self.main.execute(payment),
+                    attempts=self.cfg.main_attempts,
+                    name="main"
+                )
+                return
+            except ExecutorError as e:
+                logger.warning("Main falhou: %s — partindo para fallback", e)
+
+        await self._retry(
+            lambda: self.fallback.execute(payment),
+            attempts=self.cfg.fallback_attempts,
+            name="fallback"
+        )
+
+    async def _retry(self, fn: Callable[[], Awaitable[T]], *, attempts: int, name: str):
         retryer = AsyncRetrying(
             stop=stop_after_attempt(attempts),
-            wait=wait_exponential_jitter(initial=self.base_delay, max=self.max_delay),
+            wait=wait_exponential_jitter(
+                initial=self.cfg.base_delay,
+                max=self.cfg.max_delay
+            ),
             retry=retry_if_exception_type(ExecutorError),
             reraise=True,
-            before_sleep=lambda retry_state: logger.debug(
-                "%s: tentativa %d falhou, esperando %s segundos",
-                name,
-                retry_state.attempt_number,
-                retry_state.next_action.sleep,
+            before_sleep=lambda state: logger.debug(
+                "%s: tentativa %d falhou, esperando %.2fs",
+                name, state.attempt_number, state.next_action.sleep
             ),
         )
 
         async for attempt in retryer:
             with attempt:
-                return await operation()
+                return await asyncio.wait_for(fn(), timeout=self.cfg.per_try_timeout)
 
-    async def _run_main(self, task):
-        resp = await self.main.execute(task)
-        if resp.status_code != 200:
-            raise ExecutorError(f"Status {resp.status_code} no main")
-        
-        return resp
-
-    async def _run_fallback(self, task):
-        resp = await self.fallback.execute(task)
-        if resp.status_code != 200:
-            raise ExecutorError(f"Status {resp.status_code} no fallback")
-        
-        return resp
+    async def check_payments_health(self) -> tuple[PaymentProcessorStatus, PaymentProcessorStatus]:
+        p1 = await self.main.check_health()
+        p2 = await self.fallback.check_health()
+        return p1, p2

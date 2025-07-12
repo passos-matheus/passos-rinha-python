@@ -8,7 +8,7 @@ class RedisQueue(PaymentQueue):
     redis_client: Redis
 
     async def get_from_top(self):
-        result = await self.redis_client.zpopmin(self.queue_name)
+        result = await self.redis_client.zpopmax(self.queue_name)
         
         if result:
             member, _ = result[0]
@@ -17,7 +17,7 @@ class RedisQueue(PaymentQueue):
         return None
 
     async def get_from_bottom(self):
-        result = await self.redis_client.zpopmax(self.queue_name)
+        result = await self.redis_client.zpopmin(self.queue_name)
         if result:
             member, _ = result[0]
             return member
