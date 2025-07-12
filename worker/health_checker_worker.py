@@ -1,5 +1,6 @@
-from pydantic import BaseSettings
 from httpx import AsyncClient
+from pydantic import BaseSettings
+
 
 class HealthCheckerWorker(BaseSettings):
     cache_engine: str
@@ -21,5 +22,3 @@ class HealthCheckerWorker(BaseSettings):
             
             pass
         pass
-        
-        
