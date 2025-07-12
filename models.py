@@ -34,6 +34,10 @@ class PaymentProcessor(ABC, BaseSettings):
     async def execute(self):
         pass
 
+    @abstractmethod
+    async def check_health(self)
+        pass
+
 
 class PaymentProcessorSummary(BaseModel):
     totalRequests: int
@@ -53,9 +57,6 @@ class PaymentProcessorStatus(BaseModel):
 class PaymentDatabase(BaseSettings, ABC):
 
 
-    async def get_payments_summary(
-        from_: Optional[datetime] = Query(None, alias="from"),
-        to: Optional[datetime] = Query(None),
-    ):    
+    async def get_payments_summary():    
     
         pass

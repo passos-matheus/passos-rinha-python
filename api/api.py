@@ -1,22 +1,20 @@
+from datetime import datetime
+from typing import Optional
 from fastapi import FastAPI
+from server_queue.redis_queue import RedisQueue
 from models import (
     Payment, 
     PaymentQueue,
     PaymentDatabase,
     PaymentsSummary,
-    PaymentProcessorSummary
-
-
 )
-from queue.redis_queue import RedisQueue
+
+
+payment_queue: PaymentQueue = RedisQueue()
+payments_database: PaymentDatabase
+
 
 app = FastAPI()
-
-payment_queue: PaymentQueue = RedisQueue(
-
-)
-
-payments_database: PaymentDatabase
 
 @app.post("/payments")
 async def payments(payment: Payment):
@@ -29,8 +27,11 @@ async def payments(payment: Payment):
         "amount": payment.amount,
     }
 
-@app.get("payments-summary")
-async def get_payments_summary():
+@app.get("/payments-summary")
+async def get_payments_summary(
+    from_: Optional[datetime] = Query(None, alias="from"),
+    to: Optional[datetime] = Query(None),
+):
     
     _default, _fallback = await payments_database.get_payments_summary()
     
