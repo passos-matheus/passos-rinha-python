@@ -36,21 +36,26 @@ class Worker(BaseSettings):
     async def worker(self):
         while True:
             
-            get_from_top = False
-            run_in_default_mode = True
+            pegar_os_maiores = True
+            comecar_pelo_main_processor = True
 
             p1, p2 = await self.check_payments_health()
 
-            if p1.failing and p1.minResponseTime <= p2.minResponseTime * 1.2:
-                run_in_default_mode = True
-                get_from_top = False
+            latencia_do_p1_ta_boa = p1.minResponseTime <= p2.minResponseTime * 1.2
+            main_ta_falhando = p1.failing
 
-            if not p1.failing and p1.minResponseTime <= p2.minResponseTime * 1.2:
-                run_in_default_mode = True
-                get_from_top = False
-            
-                pass
+            if not main_ta_falhando and latencia_do_p1_ta_boa:
+                pegar_os_maiores = True
+                comecar_pelo_main_processor = True
 
+            if not main_ta_falhando and not latencia_do_p1_ta_boa:
+                pegar_os_maiores = False
+                comecar_pelo_main_processor = False
+
+            if main_ta_falhando and latencia_do_p1_ta_boa:
+                pegar_os_maiores = False
+                comecar_pelo_main_processor = True
+ 
 
         pass
 
