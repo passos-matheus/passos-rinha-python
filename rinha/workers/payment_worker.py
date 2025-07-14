@@ -36,14 +36,18 @@ class WorkerConfig(BaseSettings):
         env_prefix = "WORKER_"
 
 
-class PaymentWorker(BaseModel):
-    queue: PaymentQueue
-    main: PaymentProcessor
-    fallback: PaymentProcessor
-    cfg: WorkerConfig = Field(_default_factory=lambda: WorkerConfig())
-
-    class Config:
-        arbitraty_types = True
+class PaymentWorker:
+    def __init__(
+        self,
+        queue: PaymentQueue,
+        main: PaymentProcessor,
+        fallback: PaymentProcessor,
+        cfg: WorkerConfig = WorkerConfig()
+    ):
+        self.queue = queue
+        self.main = main
+        self.fallback = fallback
+        self.cfg = cfg
 
     async def run(self) -> None:
         while True:
