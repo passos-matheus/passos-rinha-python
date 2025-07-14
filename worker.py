@@ -7,24 +7,20 @@ from rinha.payment_processors.principal_payment_processor import PrincipalPaymen
 from rinha.payment_processors.fallback_payment_processor import FallbackPaymentProcessor
 
 
-main_processor: PaymentProcessor = PrincipalPaymentProcessor()
-fallback_processor: PaymentProcessor = FallbackPaymentProcessor()
-queue = RedisQueue()
-payment_worker_config: WorkerConfig = WorkerConfig()
+async def main():
+    main_processor = PrincipalPaymentProcessor()
+    fallback_processor = FallbackPaymentProcessor()
+    queue = RedisQueue()
+    config = WorkerConfig()
 
-payment_worker: PaymentWorker = PaymentWorker(
-    cfg=payment_worker_config,
-    main=main_processor,
-    fallback=fallback_processor,
-    queue=queue
-)
- 
+    worker = PaymentWorker(
+        main=main_processor,
+        fallback=fallback_processor,
+        queue=queue,
+        cfg=config
+    )
 
-if __name__ == 'main':
+    await worker.run()
 
-    worker_coro = payment_worker.run()
-    loop = asyncio.get_running_loop()
-    if not loop:
-        loop = asyncio.get_event_loop()
-
-    loop.create_task(worker_coro)
+if __name__ == '__main__':
+    asyncio.run(main())
