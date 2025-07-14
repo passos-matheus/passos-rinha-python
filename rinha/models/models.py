@@ -1,10 +1,11 @@
 import logging
 
+from httpx import AsyncClient
 from abc import ABC, abstractmethod
 from uuid import UUID
 from pydantic import BaseSettings, BaseModel, PrivateAttr
 from fastapi import Decimal
-
+from models.models import PaymentDatabase
 class Payment(BaseModel):
     correlationId: UUID
     amount: Decimal
@@ -32,7 +33,8 @@ class PaymentProcessorStatus(BaseModel):
 
 
 class PaymentProcessor(ABC, BaseSettings):
-    max_retries: int = 2
+    db: PaymentDatabase
+    async_client: AsyncClient
     _logger: logging.Logger = PrivateAttr(default_factory=lambda: logging.getLogger())
 
     @abstractmethod
@@ -55,8 +57,17 @@ class PaymentsSummary(BaseModel):
 
 
 class PaymentDatabase(BaseSettings, ABC):
-
-
+    async_clent: AsyncClient
+    
+    @abstractmethod
     async def get_payments_summary():    
     
+        pass
+
+    @abstractmethod
+    async def save_payment():
+        pass
+    
+    @abstractmethod
+    async def get_payment():
         pass
