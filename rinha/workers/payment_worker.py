@@ -9,7 +9,7 @@ from tenacity import (
 )
 from pydantic import BaseModel, BaseSettings, Field
 from typing import Any, Callable, Awaitable, TypeVar
-from models import PaymentQueue, PaymentProcessor, PaymentProcessorStatus
+from rinha.models.models import PaymentQueue, PaymentProcessor, PaymentProcessorStatus
 
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class WorkerConfig(BaseSettings):
         env_prefix = "WORKER_"
 
 
-class Worker(BaseModel):
+class PaymentWorker(BaseModel):
     queue: PaymentQueue
     main: PaymentProcessor
     fallback: PaymentProcessor
@@ -45,7 +45,7 @@ class Worker(BaseModel):
     class Config:
         arbitraty_types = True
 
-    async def worker(self) -> None:
+    async def run(self) -> None:
         while True:
             try:
                 strategy = await self._determine_strategy()
@@ -120,3 +120,4 @@ class Worker(BaseModel):
         p1 = await self.main.check_health()
         p2 = await self.fallback.check_health()
         return p1, p2
+

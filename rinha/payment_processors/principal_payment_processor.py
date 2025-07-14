@@ -1,4 +1,4 @@
-from models.payment_processor import PaymentProcessor
+from rinha.models.models import PaymentProcessor
 
 
 class PrincipalPaymentProcessor(PaymentProcessor):

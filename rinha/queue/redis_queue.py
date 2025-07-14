@@ -1,5 +1,5 @@
-from models.payments_queue import PaymentQueue
-from models.payment import Payment
+from rinha.models.models import PaymentQueue
+from rinha.models.models import Payment
 from redis.asyncio import Redis
 
 import json

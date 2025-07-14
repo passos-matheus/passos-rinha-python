@@ -1,8 +1,8 @@
-from models.payment_processor import PaymentProcessor
+from rinha.models.models import PaymentProcessor
 
 
 class FallbackPaymentProcessor(PaymentProcessor):
-
+    
 
     async def execute(self):
         pass
