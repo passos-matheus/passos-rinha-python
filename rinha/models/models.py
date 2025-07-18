@@ -65,7 +65,7 @@ class PaymentDatabase(BaseSettings, ABC):
         pass
 
     @abstractmethod
-    async def save_payment():
+    async def save_payment(payment: Payment, response):
         pass
     
     @abstractmethod

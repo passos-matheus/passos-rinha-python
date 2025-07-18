@@ -1,8 +1,9 @@
-from rinha.models.models import PaymentQueue
-from rinha.models.models import Payment
-from redis.asyncio import Redis
-
 import json
+
+from redis.asyncio import Redis
+from rinha.models.models import Payment
+from rinha.models.models import PaymentQueue
+
 
 class RedisQueue(PaymentQueue):
     redis_client: Redis
@@ -32,4 +33,3 @@ class RedisQueue(PaymentQueue):
             await self.redis_client.zadd(self.queue_name, {member: score})
         except Exception as e:
             raise RuntimeError("Erro, ajustar dps") from e
-

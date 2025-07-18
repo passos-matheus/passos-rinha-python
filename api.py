@@ -1,8 +1,10 @@
-from datetime import datetime
 from typing import Optional
 from fastapi import FastAPI
-from server_queue.redis_queue import RedisQueue
-from models import (
+from datetime import datetime
+from fastapi.params import Query
+from rinha.queue.redis_queue import RedisQueue
+from rinha.persistence.redis_database import RedisDatabase
+from rinha.models.models import (
     Payment, 
     PaymentQueue,
     PaymentDatabase,
@@ -11,14 +13,13 @@ from models import (
 
 
 payment_queue: PaymentQueue = RedisQueue()
-payments_database: PaymentDatabase
-
+payments_database: PaymentDatabase = RedisDatabase()
 
 app = FastAPI()
 
+
 @app.post("/payments")
 async def payments(payment: Payment):
-    
     inserted = await payment_queue._insert_on_queue(payment)
 
     return {

@@ -7,19 +7,18 @@ from httpx import AsyncClient
 
 
 class FallbackPaymentProcessor(PaymentProcessor):
-    
-
 
     async def execute(self, payment: Payment):
         try: 
-
             payment_request = payment.model_dump()
             payment_request["requestedAt"] = datetime.datetime.now()
             
-            endpoint = f"{self.base_url}/aaa"
-            resp = await self.client.post(endpoint, json=payment_request)
+            endpoint = f"{self.base_url}/payments"
+            resp = await self.async_client.post(endpoint, json=payment_request)
             if resp.status_code != 200:
                 raise
+
+            await self.db.save_payment(payment, resp)
 
             return resp
         except Exception as e:
