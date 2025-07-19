@@ -59,7 +59,7 @@ async def main():
     )
     payments: list[Payment] = [Payment(amount=random.uniform(1, 1000020), correlationId=uuid.uuid4()) for _ in range(0, 100)]
     for payment in payments:
-        await queue._insert_on_queue(payment)
+        await queue.insert_on_queue(payment)
 
 
     await worker.run()

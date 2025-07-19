@@ -4,7 +4,7 @@ from typing import Tuple, Optional
 from redis.asyncio import Redis
 
 from rinha.models.models import PaymentDatabase
-from models.models import Payment, PaymentProcessorStatus, PaymentRequest
+from rinha.models.models import Payment, PaymentProcessorStatus, PaymentRequest
 
 
 class RedisDatabase(PaymentDatabase):

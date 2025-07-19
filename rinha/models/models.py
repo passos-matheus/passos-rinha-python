@@ -29,7 +29,7 @@ class PaymentQueue(ABC, BaseModel):
         pass
 
     @abstractmethod
-    async def _insert_on_queue(self, payment: Payment) -> bool:
+    async def insert_on_queue(self, payment: Payment) -> bool:
         pass
 
     @abstractmethod

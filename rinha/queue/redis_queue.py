@@ -28,7 +28,7 @@ class RedisQueue(PaymentQueue):
         
         return None
 
-    async def _insert_on_queue(self, payment: Payment):
+    async def insert_on_queue(self, payment: Payment):
         try:
             score = float(payment.amount)
             member = json.dumps({

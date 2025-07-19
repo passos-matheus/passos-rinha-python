@@ -114,7 +114,7 @@ class PaymentWorker:
             )
         except ExecutorError as e:
             logger.warning("Fallback falhou: %s — devolvendo item a fila.", e)
-            await self.queue._insert_on_queue(payment)
+            await self.queue.insert_on_queue(payment)
 
     async def _retry(self, fn: Callable[[], Awaitable[T]], *, attempts: int, name: str):
         retryer = AsyncRetrying(

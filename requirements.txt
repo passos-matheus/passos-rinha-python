@@ -4,3 +4,5 @@ tenacity
 redis
 httpx
 pydantic-settings
+uvicorn
+
