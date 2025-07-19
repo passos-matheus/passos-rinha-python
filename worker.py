@@ -12,7 +12,7 @@ from redis.asyncio import Redis
 
 async def main():
     redis_client = Redis(
-        host='redis',
+        host='localhost',
         port=6379,
         decode_responses=True,
         socket_timeout=5,
@@ -31,12 +31,12 @@ async def main():
     )
 
     main_processor: PaymentProcessor = PrincipalPaymentProcessor(
-        endpoint='http://payment-processor-default:8080',
+        endpoint='http://localhost:8001',
         async_client=async_client,
     )
 
     fallback_processor = FallbackPaymentProcessor(
-        endpoint='http://payment-processor-fallback:8080',
+        endpoint='http://localhost:8001',
         async_client=async_client,
     )
     

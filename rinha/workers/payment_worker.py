@@ -56,6 +56,12 @@ class PaymentWorker:
             try:
                 strategy = await self._determine_strategy()
                 payment = await self._get_next_payment(strategy)
+
+                if not payment:
+                    print('fila vazia')
+                    await asyncio.sleep(0.01)
+                    continue
+
                 await self._process_payment(payment, strategy)
             except asyncio.CancelledError:
                 logger.info("Worker cancelado, encerrando loop.")
@@ -65,7 +71,8 @@ class PaymentWorker:
                 raise
 
     async def _determine_strategy(self) -> Strategy:
-        p1, p2 = await self.db.check_health()
+        status = await self.db.check_health()
+        p1, p2 = status.get('p1'), status.get('p2')
         
         main_ok = not p1.failing
         latency_ok = p1.minResponseTime <= p2.minResponseTime * 1.2
