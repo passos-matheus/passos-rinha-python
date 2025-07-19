@@ -45,33 +45,32 @@ class HealthCheckerWorker:
         try:
             redis_data = await self.db.check_health()
 
-            if not redis_data or not isinstance(redis_data, tuple) or len(redis_data) != 2:
+            if not redis_data or not isinstance(redis_data, dict):
                 print("Status ainda não disponível no Redis!")
 
             responses = await asyncio.gather(
-                self.mock_response_200(),
-                self.mock_response_429(), return_exceptions=True
+                self.get_payment_health_status(url=self.default_url, _type='p1'),
+                self.get_payment_health_status(url=self.fallback_url, _type='p2'),
+                # self.mock_response_200(),
+                return_exceptions=True
             )
 
             payments_status: list = []
             for resp in responses:
-                payment_type = resp.headers.get('payment-type')
+                payment_type = resp.headers.get('payment_type')
 
                 if resp.status_code != 200:
                     actual = redis_data.get(payment_type)
-
                     resp = (
-                        actual if actual else PaymentProcessorStatus(failing=False, minResponseTime=0, payment_type=payment_type),
-                        int(resp.headers.get('retry_after', random.uniform(2, 8)))
+                        actual if actual else PaymentProcessorStatus(failing=True, minResponseTime=0, payment_type=payment_type),
+                        int(resp.headers.get('retry_after', 5))
                     )
-
-                    print(resp)
                     payments_status.append(resp)
                     continue
 
                 status = resp.json()
-                status["payment_type"] = resp.headers.get('payment-type', 'aaaaaaaaaa')
-                resp = (PaymentProcessorStatus(**status), random.uniform(2, 8))
+                status["payment_type"] = resp.headers.get('payment_type')
+                resp = (PaymentProcessorStatus(**status), 5)
                 payments_status.append(resp)
 
             default, fallback = payments_status
@@ -79,23 +78,8 @@ class HealthCheckerWorker:
 
             print(default)
             print(fallback)
-            # await self.db.save_health_status(default, fallback)
+            await self.db.save_health_status(default[0], fallback[0])
             return payments_status
-            #
-            # actual_p1, _ = redis_data
-            #
-            # response = await self.async_client.get(url=url)
-            #
-            # if response.status_code == 429:
-            #     retry_time = int(response.headers.get("Retry-After", "5"))
-            #     return actual_p1, retry_time
-            #
-            # response.raise_for_status()
-            #
-            # data = response.json()
-            #
-            # return data, 5
-
         except Exception as e:
             print(f"Erro em check_health: {e}")
             return None, 5
@@ -105,21 +89,40 @@ class HealthCheckerWorker:
 
         return Response(
             status_code=429,
-            headers=Headers({"Retry-After": "5", "payment-type": "p2"}),
+            headers=Headers({"Retry-After": "5", "payment_type": "p2"}),
             content=b"Too many requests"
         )
 
     async def mock_response_200(self):
         await asyncio.sleep(0.12)
 
+        true_or_false = int(random.uniform(1, 2))
         json_response = json.dumps({
-            "failing": False,
-            "minResponseTime": 120
+            "failing": true_or_false == 1,
+            "minResponseTime": int(random.uniform(100, 700))
         })
         return Response(
             status_code=200,
-            headers=Headers({"payment-type": "p1"}),
+            headers=Headers({"payment_type": "p2"}),
             content=json_response
         )
 
 
+    async def get_payment_health_status(self, url: str, _type: str):
+        try:
+            response = await self.async_client.get(url)
+            print(response)
+            headers = dict(response.headers)
+            headers["payment_type"] = _type
+
+            resp = Response(
+                status_code=response.status_code,
+                headers=Headers(headers),
+                content=response.content,
+                request=response.request,
+            )
+
+            return resp
+        except Exception as e:
+            print(e)
+            raise e
