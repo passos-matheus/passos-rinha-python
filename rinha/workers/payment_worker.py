@@ -7,10 +7,10 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential_jitter,
 )
-from pydantic import BaseModel, BaseSettings, Field
+from pydantic import BaseModel, Field
 from typing import Any, Callable, Awaitable, TypeVar
-from rinha.models.models import PaymentQueue, PaymentProcessor, PaymentProcessorStatus
-
+from rinha.models.models import PaymentQueue, PaymentProcessor, PaymentProcessorStatus, PaymentDatabase
+from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -39,11 +39,13 @@ class WorkerConfig(BaseSettings):
 class PaymentWorker:
     def __init__(
         self,
+        db: PaymentDatabase,
         queue: PaymentQueue,
         main: PaymentProcessor,
         fallback: PaymentProcessor,
         cfg: WorkerConfig = WorkerConfig()
     ):
+        self.db = db
         self.queue = queue
         self.main = main
         self.fallback = fallback
@@ -60,9 +62,10 @@ class PaymentWorker:
                 break
             except Exception:
                 logger.exception("Erro inesperado no worker")
+                raise
 
     async def _determine_strategy(self) -> Strategy:
-        p1, p2 = await self.check_payments_health()
+        p1, p2 = await self.db.check_health()
         
         main_ok = not p1.failing
         latency_ok = p1.minResponseTime <= p2.minResponseTime * 1.2

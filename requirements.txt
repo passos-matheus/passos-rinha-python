@@ -3,3 +3,4 @@ pydantic
 tenacity
 redis
 httpx
+pydantic-settings

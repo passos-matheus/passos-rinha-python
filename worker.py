@@ -1,39 +1,57 @@
 import os
 import asyncio
 
-from rinha.models.models import PaymentDatabase
+from httpx import AsyncClient, Limits, Timeout
 from rinha.queue.redis_queue import RedisQueue
-from rinha.workers.payment_worker import PaymentWorker, WorkerConfig
-from rinha.payment_processors.principal_payment_processor import PrincipalPaymentProcessor
-from rinha.payment_processors.fallback_payment_processor import FallbackPaymentProcessor
-from httpx import AsyncClient
+from rinha.models.models import PaymentDatabase, PaymentProcessor
 from rinha.persistence.redis_database import RedisDatabase
-
+from rinha.workers.payment_worker import PaymentWorker, WorkerConfig
+from rinha.payment_processors.fallback_payment_processor import FallbackPaymentProcessor
+from rinha.payment_processors.principal_payment_processor import PrincipalPaymentProcessor
+from redis.asyncio import Redis
 
 async def main():
-    max_connections: int = int(os.getenv('HTTPX_MAX_CONNECTIONS', '100'))
-    base_url: str = os.getenv('GATEWAYS_BASE_URL', '123 n lembro')
-
-
-    async_client: AsyncClient = AsyncClient(
-        base_url=base_url,
-        limits=max_connections
+    redis_client = Redis(
+        host='redis',
+        port=6379,
+        decode_responses=True,
+        socket_timeout=5,
     )
 
-    db: PaymentDatabase = RedisDatabase(async_client=async_client)
-    main_processor = PrincipalPaymentProcessor(async_client=async_client, db=db)
-    fallback_processor = FallbackPaymentProcessor(async_client=async_client, db=db)
+    async_client: AsyncClient = AsyncClient(
+        timeout=Timeout(read=0.5, write=0.5, connect=0.5, pool=None),
+        limits=Limits(
+            max_connections=30,
+            max_keepalive_connections=50
+        )
+    )
+
+    db: PaymentDatabase = RedisDatabase(
+        redis_client=redis_client
+    )
+
+    main_processor: PaymentProcessor = PrincipalPaymentProcessor(
+        endpoint='http://payment-processor-default:8080',
+        async_client=async_client,
+    )
+
+    fallback_processor = FallbackPaymentProcessor(
+        endpoint='http://payment-processor-fallback:8080',
+        async_client=async_client,
+    )
     
-    queue = RedisQueue()
-   
+    queue = RedisQueue(
+        queue_name='payment_queue',
+        redis_client=redis_client
+    )
 
     config = WorkerConfig()
-
     worker = PaymentWorker(
         main=main_processor,
         fallback=fallback_processor,
         queue=queue,
-        cfg=config
+        cfg=config,
+        db=db
     )
 
     await worker.run()
