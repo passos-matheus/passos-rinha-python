@@ -1,9 +1,11 @@
 import os
 import asyncio
+import random
+import uuid
 
 from httpx import AsyncClient, Limits, Timeout
 from rinha.queue.redis_queue import RedisQueue
-from rinha.models.models import PaymentDatabase, PaymentProcessor
+from rinha.models.models import PaymentDatabase, PaymentProcessor, Payment
 from rinha.persistence.redis_database import RedisDatabase
 from rinha.workers.payment_worker import PaymentWorker, WorkerConfig
 from rinha.payment_processors.fallback_payment_processor import FallbackPaymentProcessor
@@ -31,13 +33,15 @@ async def main():
     )
 
     main_processor: PaymentProcessor = PrincipalPaymentProcessor(
-        endpoint='http://localhost:8001',
+        endpoint='http://localhost:8001/payments',
         async_client=async_client,
+        db=db
     )
 
     fallback_processor = FallbackPaymentProcessor(
-        endpoint='http://localhost:8001',
+        endpoint='http://localhost:8002/payments',
         async_client=async_client,
+        db=db
     )
     
     queue = RedisQueue(
@@ -53,6 +57,10 @@ async def main():
         cfg=config,
         db=db
     )
+    payments: list[Payment] = [Payment(amount=random.uniform(1, 1000020), correlationId=uuid.uuid4()) for _ in range(0, 100)]
+    for payment in payments:
+        await queue._insert_on_queue(payment)
+
 
     await worker.run()
 

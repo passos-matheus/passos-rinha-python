@@ -1,5 +1,5 @@
+import datetime
 import logging
-from decimal import Decimal
 from typing import Tuple
 
 from httpx import AsyncClient
@@ -12,7 +12,7 @@ class Payment(BaseModel):
         arbitrary_types_allowed = True
 
     correlationId: UUID
-    amount: Decimal
+    amount: float
 
  
 class PaymentQueue(ABC, BaseModel):
@@ -32,6 +32,10 @@ class PaymentQueue(ABC, BaseModel):
     async def _insert_on_queue(self, payment: Payment) -> bool:
         pass
 
+    @abstractmethod
+    async def has_items(self) -> bool:
+        pass
+
 
 class PaymentProcessorStatus(BaseModel):
     class Config:
@@ -40,6 +44,13 @@ class PaymentProcessorStatus(BaseModel):
     failing: bool
     minResponseTime: int
     payment_type: str
+
+
+class PaymentRequest(BaseModel):
+        correlationId: str
+        amount: float
+        requestedAt: str
+        processor_type: str
 
 class PaymentDatabase(BaseModel, ABC):
     class Config:
@@ -51,7 +62,7 @@ class PaymentDatabase(BaseModel, ABC):
         pass
 
     @abstractmethod
-    async def save_payment(self, payment: Payment, response):
+    async def save_payment(self, payment: PaymentRequest, response):
         pass
 
     @abstractmethod
@@ -74,7 +85,7 @@ class PaymentProcessor(ABC, BaseModel):
         arbitrary_types_allowed = True
 
     endpoint: str
-
+    db: PaymentDatabase
     async_client: AsyncClient
     _logger: logging.Logger = PrivateAttr(default_factory=lambda: logging.getLogger())
 
@@ -89,7 +100,7 @@ class PaymentProcessorSummary(BaseModel):
         arbitrary_types_allowed = True
 
     totalRequests: int
-    totalAmount: Decimal
+    totalAmount: float
 
 
 class PaymentsSummary(BaseModel):

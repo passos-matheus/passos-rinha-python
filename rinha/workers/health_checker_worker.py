@@ -49,9 +49,10 @@ class HealthCheckerWorker:
                 print("Status ainda não disponível no Redis!")
 
             responses = await asyncio.gather(
-                self.get_payment_health_status(url=self.default_url, _type='p1'),
-                self.get_payment_health_status(url=self.fallback_url, _type='p2'),
-                # self.mock_response_200(),
+                # self.get_payment_health_status(url=self.default_url, _type='p1'),
+                # self.get_payment_health_status(url=self.fallback_url, _type='p2'),
+                self.mock_response_200_p1(),
+                self.mock_response_200_p2(),
                 return_exceptions=True
             )
 
@@ -75,7 +76,6 @@ class HealthCheckerWorker:
 
             default, fallback = payments_status
 
-
             print(default)
             print(fallback)
             await self.db.save_health_status(default[0], fallback[0])
@@ -93,8 +93,28 @@ class HealthCheckerWorker:
             content=b"Too many requests"
         )
 
-    async def mock_response_200(self):
-        await asyncio.sleep(0.12)
+    async def mock_response_200_p1(self):
+        delay = random.uniform(0.100, 0.500)
+        print(f'delay p1: {delay}')
+
+        await asyncio.sleep(delay)
+
+        true_or_false = int(random.uniform(1, 2))
+        json_response = json.dumps({
+            "failing": true_or_false == 1,
+            "minResponseTime": int(random.uniform(100, 700))
+        })
+        return Response(
+            status_code=200,
+            headers=Headers({"payment_type": "p1"}),
+            content=json_response
+        )
+
+    async def mock_response_200_p2(self):
+        delay = random.uniform(0.100, 0.500)
+        print(f'delay p2: {delay}')
+
+        await asyncio.sleep(delay)
 
         true_or_false = int(random.uniform(1, 2))
         json_response = json.dumps({

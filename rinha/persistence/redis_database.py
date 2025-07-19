@@ -4,7 +4,8 @@ from typing import Tuple, Optional
 from redis.asyncio import Redis
 
 from rinha.models.models import PaymentDatabase
-from models.models import Payment, PaymentProcessorStatus
+from models.models import Payment, PaymentProcessorStatus, PaymentRequest
+
 
 class RedisDatabase(PaymentDatabase):
     redis_client: Redis
@@ -41,8 +42,14 @@ class RedisDatabase(PaymentDatabase):
 
         return response
 
-    async def save_payment(self, payment: Payment, response):
-        pass
+    async def save_payment(self, payment: PaymentRequest, response):
+       try:
+            key = payment.correlationId
+            value = json.dumps(payment.model_dump())
+            print(f'salvando payment procesado no banco. key: {key}, value: {value}')
+            await self.redis_client.set(key, value)
+       except Exception as e:
+           raise
 
     async def get_payments_summary(self):
         pass

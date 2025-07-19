@@ -54,14 +54,15 @@ class PaymentWorker:
     async def run(self) -> None:
         while True:
             try:
-                strategy = await self._determine_strategy()
-                payment = await self._get_next_payment(strategy)
-
-                if not payment:
+                has_items = await self.queue.has_items()
+                if not has_items:
                     print('fila vazia')
                     await asyncio.sleep(0.01)
                     continue
 
+                strategy = await self._determine_strategy()
+                payment = await self._get_next_payment(strategy)
+                print(f'payment: {payment}')
                 await self._process_payment(payment, strategy)
             except asyncio.CancelledError:
                 logger.info("Worker cancelado, encerrando loop.")
@@ -73,7 +74,7 @@ class PaymentWorker:
     async def _determine_strategy(self) -> Strategy:
         status = await self.db.check_health()
         p1, p2 = status.get('p1'), status.get('p2')
-        
+
         main_ok = not p1.failing
         latency_ok = p1.minResponseTime <= p2.minResponseTime * 1.2
 
@@ -105,11 +106,15 @@ class PaymentWorker:
             except ExecutorError as e:
                 logger.warning("Main falhou: %s — partindo para fallback", e)
 
-        await self._retry(
-            lambda: self.fallback.execute(payment),
-            attempts=self.cfg.fallback_attempts,
-            name="fallback"
-        )
+        try:
+            await self._retry(
+                lambda: self.fallback.execute(payment),
+                attempts=self.cfg.fallback_attempts,
+                name="fallback"
+            )
+        except ExecutorError as e:
+            logger.warning("Fallback falhou: %s — devolvendo item a fila.", e)
+            await self.queue._insert_on_queue(payment)
 
     async def _retry(self, fn: Callable[[], Awaitable[T]], *, attempts: int, name: str):
         retryer = AsyncRetrying(

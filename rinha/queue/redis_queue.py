@@ -1,4 +1,5 @@
 import json
+from statistics import correlation
 
 from redis.asyncio import Redis
 from rinha.models.models import Payment
@@ -13,7 +14,8 @@ class RedisQueue(PaymentQueue):
         
         if result:
             member, _ = result[0]
-            return member
+            payment = json.loads(member)
+            return Payment(**payment)
         
         return None
 
@@ -21,15 +23,23 @@ class RedisQueue(PaymentQueue):
         result = await self.redis_client.zpopmin(self.queue_name)
         if result:
             member, _ = result[0]
-            return member
+            payment = json.loads(member)
+            return Payment(**payment)
         
         return None
 
     async def _insert_on_queue(self, payment: Payment):
         try:
-            score: float = payment.amount
-            member = json.dumps(payment)
+            score = float(payment.amount)
+            member = json.dumps({
+                "correlationId": str(payment.correlationId),
+                "amount": payment.amount
+            })
 
             await self.redis_client.zadd(self.queue_name, {member: score})
         except Exception as e:
             raise RuntimeError("Erro, ajustar dps") from e
+
+    async def has_items(self) -> bool:
+        count = await self.redis_client.zcard(self.queue_name)
+        return count > 0
