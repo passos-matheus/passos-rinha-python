@@ -1,8 +1,9 @@
 from typing import Optional
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from datetime import datetime
-from fastapi.params import Query
 from redis.asyncio import Redis
+
+from rinha.models.models import PaymentsSummaryFilter
 from rinha.queue.redis_queue import RedisQueue
 from rinha.persistence.redis_database import RedisDatabase
 from rinha.models.models import (
@@ -33,23 +34,22 @@ app = FastAPI()
 async def payments(payment: Payment):
     try:
         await queue.insert_on_queue(payment)
-
-        return {
+        response_dict: dict = {
             "message": "Pagamento enfileirado com sucesso",
             "correlationId": payment.correlationId,
             "amount": payment.amount,
         }
+
+        return response_dict
     except:
         raise
 
 @app.get("/payments-summary")
-async def get_payments_summary(
-    from_: Optional[datetime] = Query(None, alias="from"),
-    to: Optional[datetime] = Query(None),
-):
-
-    response = await db.get_payments_summary(None, None)
+async def get_payments_summary(payment_filter: PaymentsSummaryFilter = Depends()):
+    response = await db.get_payments_summary(
+        from_str=payment_filter.date_from,
+        to_str=payment_filter.date_to
+    )
 
     print(response)
-
     return response

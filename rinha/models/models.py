@@ -5,7 +5,12 @@ from typing import Tuple, Optional
 from httpx import AsyncClient
 from abc import ABC, abstractmethod
 from uuid import UUID
-from pydantic import BaseModel, PrivateAttr
+from pydantic import BaseModel, PrivateAttr, Field
+
+
+class PaymentsSummaryFilter(BaseModel):
+    date_from: Optional[str] = Field(default=None, alias="from")
+    date_to: Optional[str] = Field(default=None, alias="to")
 
 class Payment(BaseModel):
     class Config:
