@@ -23,7 +23,7 @@ redis_client = Redis(
 db: PaymentDatabase = RedisDatabase(redis_client=redis_client)
 
 queue = RedisQueue(
-    queue_name='payments-queue',
+    queue_name='payment_queue',
     redis_client=redis_client
 )
 
@@ -48,9 +48,8 @@ async def get_payments_summary(
     to: Optional[datetime] = Query(None),
 ):
 
-    _default, _fallback = await db.get_payments_summary()
+    response = await db.get_payments_summary(None, None)
 
-    return PaymentsSummary(
-        default=_default,
-        fallback=_fallback
-    )
+    print(response)
+
+    return response

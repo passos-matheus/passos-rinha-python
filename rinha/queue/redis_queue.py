@@ -42,4 +42,5 @@ class RedisQueue(PaymentQueue):
 
     async def has_items(self) -> bool:
         count = await self.redis_client.zcard(self.queue_name)
+        # print(f'payments na fila: {count}')
         return count > 0

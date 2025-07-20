@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Tuple
+from typing import Tuple, Optional
 
 from httpx import AsyncClient
 from abc import ABC, abstractmethod
@@ -57,8 +57,7 @@ class PaymentDatabase(BaseModel, ABC):
         arbitrary_types_allowed = True
 
     @abstractmethod
-    async def get_payments_summary(self):
-
+    async def get_payments_summary(self, from_str: Optional[str], to_str: Optional[str]):
         pass
 
     @abstractmethod
@@ -66,7 +65,7 @@ class PaymentDatabase(BaseModel, ABC):
         pass
 
     @abstractmethod
-    async def get_payment(self):
+    async def get_payment(self, payment_id: str):
         pass
 
     @abstractmethod
@@ -96,16 +95,10 @@ class PaymentProcessor(ABC, BaseModel):
 
 
 class PaymentProcessorSummary(BaseModel):
-    class Config:
-        arbitrary_types_allowed = True
-
     totalRequests: int
     totalAmount: float
 
 
 class PaymentsSummary(BaseModel):
-    class Config:
-        arbitrary_types_allowed = True
-
     default: PaymentProcessorSummary
     fallback: PaymentProcessorSummary

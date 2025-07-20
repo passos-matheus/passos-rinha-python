@@ -56,7 +56,6 @@ class PaymentWorker:
             try:
                 has_items = await self.queue.has_items()
                 if not has_items:
-                    print('fila vazia')
                     await asyncio.sleep(0.01)
                     continue
 

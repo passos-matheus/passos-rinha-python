@@ -11,6 +11,12 @@ class FallbackPaymentProcessor(PaymentProcessor):
 
     async def execute(self, payment: Payment):
         try:
+            payment_already_exists_on_db = await self.db.get_payment(payment_id=str(payment.correlationId))
+
+            if payment_already_exists_on_db:
+                print('pagamento já processado!')
+                return None
+
             payment_request: dict = {
                 "correlationId": str(payment.correlationId),
                 "amount": payment.amount,

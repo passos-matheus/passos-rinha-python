@@ -49,10 +49,8 @@ class HealthCheckerWorker:
                 print("Status ainda não disponível no Redis!")
 
             responses = await asyncio.gather(
-                # self.get_payment_health_status(url=self.default_url, _type='p1'),
-                # self.get_payment_health_status(url=self.fallback_url, _type='p2'),
-                self.mock_response_200_p1(),
-                self.mock_response_200_p2(),
+                self.get_payment_health_status(url=self.default_url, _type='p1'),
+                self.get_payment_health_status(url=self.fallback_url, _type='p2'),
                 return_exceptions=True
             )
 
@@ -83,50 +81,6 @@ class HealthCheckerWorker:
         except Exception as e:
             print(f"Erro em check_health: {e}")
             return None, 5
-
-    async def mock_response_429(self):
-        await asyncio.sleep(0.1)
-
-        return Response(
-            status_code=429,
-            headers=Headers({"Retry-After": "5", "payment_type": "p2"}),
-            content=b"Too many requests"
-        )
-
-    async def mock_response_200_p1(self):
-        delay = random.uniform(0.100, 0.500)
-        print(f'delay p1: {delay}')
-
-        await asyncio.sleep(delay)
-
-        true_or_false = int(random.uniform(1, 2))
-        json_response = json.dumps({
-            "failing": true_or_false == 1,
-            "minResponseTime": int(random.uniform(100, 700))
-        })
-        return Response(
-            status_code=200,
-            headers=Headers({"payment_type": "p1"}),
-            content=json_response
-        )
-
-    async def mock_response_200_p2(self):
-        delay = random.uniform(0.100, 0.500)
-        print(f'delay p2: {delay}')
-
-        await asyncio.sleep(delay)
-
-        true_or_false = int(random.uniform(1, 2))
-        json_response = json.dumps({
-            "failing": true_or_false == 1,
-            "minResponseTime": int(random.uniform(100, 700))
-        })
-        return Response(
-            status_code=200,
-            headers=Headers({"payment_type": "p2"}),
-            content=json_response
-        )
-
 
     async def get_payment_health_status(self, url: str, _type: str):
         try:
