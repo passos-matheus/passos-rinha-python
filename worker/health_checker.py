@@ -33,7 +33,7 @@ async def check_health_routine():
 
 def set_best_processor(default, fallback):
     main_ok = not default['failing']
-    latency_ok = default['minResponseTime'] <= fallback['minResponseTime'] * 1.2
+    latency_ok = default['minResponseTime'] <= 100 or default['minResponseTime'] <= fallback['minResponseTime'] * 1.2
 
     if main_ok and latency_ok:
         return 1
