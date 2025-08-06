@@ -55,7 +55,7 @@ async def get_payment_processor_default_health_status(_timeout: Optional[float] 
             if response.status != 200:
                 response.raise_for_status()
 
-            status = response.json()
+            status = await response.json()
 
             return status
     except Exception as e:
@@ -71,7 +71,7 @@ async def get_payment_processor_fallback_health_status(_timeout: Optional[float]
             if response.status != 200:
                 response.raise_for_status()
 
-            status = response.json()
+            status = await response.json()
 
             return status
     except Exception as e:
