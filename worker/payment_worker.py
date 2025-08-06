@@ -4,21 +4,11 @@ import time
 import asyncio
 
 from datetime import datetime
-from redis.asyncio.client import Redis
+from utils.redis_client import redis_client
 from payment_queue import consume_nats, queue
+from health_checker import check_health_routine
 from HTTP.aiohtpp_session import cleanup_session
-from redis.asyncio.connection import ConnectionPool
 from payment_processor import process_payment_in_default_processor, process_payment_in_fallback_processor
-
-
-redis_pool = ConnectionPool(
-    host=os.getenv("REDIS_HOST", "redis-db"),
-    port=6379,
-    max_connections=100,
-    decode_responses=True,
-    socket_timeout=5
-)
-redis_client = Redis(connection_pool=redis_pool)
 
 # 12980, duas instâncias
 # NUM_WORKERS = 4
@@ -66,14 +56,23 @@ async def process_queue(worker_id):
 async def process_batch(batch, worker_id):
     semaphore = semaphores[worker_id]
 
+    best = 1
+    health_status = await redis_client.get('health_processors')
+    if health_status:
+        status = json.loads(health_status)
+        best = status["best"]
+
     async def run_with_semaphore(payment_json):
         async with semaphore:
-            return await process_payment(payment_json)
+            return await process_payment(payment_json, best)
 
     tasks = [run_with_semaphore(payment) for payment in batch]
     await asyncio.gather(*tasks, return_exceptions=True)
 
-async def process_payment(payment_json):
+
+async def process_payment(payment_json, best):
+    max_retries = 3
+
     try:
         payment = json.loads(payment_json)
         payload = {
@@ -82,26 +81,45 @@ async def process_payment(payment_json):
             "requestedAt": cached_datetime()
         }
 
-        await process_payment_in_default_processor(payload, 5.1)
+        for attempt in range(max_retries):
+            try:
+                if best == 1:
+                    await process_payment_in_default_processor(payload, 5.1)
+                else:
+                    await process_payment_in_fallback_processor(payload, 5.1)
+
+                break
+
+            except Exception as e:
+                error_str = str(e).lower()
+                is_retryable = any(keyword in error_str for keyword in ['timeout', 'connection', 'refused'])
+
+                if is_retryable and attempt < max_retries - 1:
+                    await asyncio.sleep(0.1 * (attempt + 1))
+                    continue
+                elif is_retryable and attempt == max_retries - 1:
+                    await queue.put(payment_json)
+                else:
+                    raise
 
         key = "default"
         score = int(datetime.fromisoformat(payload['requestedAt']).timestamp() * 1000)
         member = json.dumps(payload)
 
         await redis_client.zadd(key, {member: score})
+
     except (KeyError, ValueError, TypeError):
         return "parse_error"
     except Exception as e:
-        error_str = str(e).lower()
-        if any(keyword in error_str for keyword in ['timeout', 'connection', 'refused']):
-            await queue.put(payment_json)
-        raise e
+        print(e)
+        await queue.put(payment_json)
 
 async def main():
     try:
         consumers = [process_queue(i) for i in range(NUM_WORKERS)]
         await asyncio.gather(
             consume_nats(),
+            check_health_routine(),
             *consumers
         )
     finally:
