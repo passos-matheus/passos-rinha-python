@@ -5,4 +5,6 @@ redis
 httpx
 pydantic-settings
 uvicorn
-
+nats-py
+psutil
+aiohttp
