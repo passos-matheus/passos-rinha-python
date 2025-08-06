@@ -14,10 +14,13 @@ async def check_health_routine():
                 get_payment_processor_default_health_status()
             )
 
+            best = set_best_processor(default, fallback)
+
             key = "health_processors"
             status = {
                 "default": default,
-                "fallback": fallback
+                "fallback": fallback,
+                "best": best
             }
 
             await redis_client.set(key, status)
@@ -26,3 +29,18 @@ async def check_health_routine():
             print(e)
             await asyncio.sleep(5)
             continue
+
+def set_best_processor(default, fallback):
+        main_ok = not default['failing']
+        latency_ok = default['minResponseTime'] <= fallback['minResponseTime'] * 1.2
+
+        if main_ok and latency_ok:
+            return 1
+
+        if main_ok and not latency_ok:
+            return 2
+
+        if not main_ok and latency_ok:
+            return 1
+
+        return 2
