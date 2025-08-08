@@ -1,5 +1,6 @@
 import asyncio
 import json
+from typing import Dict, Any, Tuple, Coroutine
 
 from utils.redis_client import redis_client
 from payment_processor import (
@@ -7,7 +8,13 @@ from payment_processor import (
     get_payment_processor_fallback_health_status
 )
 
-async def check_health_routine():
+
+MAX_DEFAULT_LATENCY_MS = 100
+MIN_TIMEOUT_SEC = 0.1
+MAX_TIMEOUT_SEC = 10.0
+LATENCY_TOLERANCE_FACTOR = 1.2
+
+async def check_health_routine() -> Coroutine:
     while True:
         try:
             default, fallback = await asyncio.gather(
@@ -15,33 +22,50 @@ async def check_health_routine():
                 get_payment_processor_fallback_health_status()
             )
 
-            best = set_best_processor(default, fallback)
+            best_processor, best_timeout  = select_best_processor(default, fallback)
 
             key = "health_processors"
             status = {
                 "default": default,
                 "fallback": fallback,
-                "best": best
+                "best": best_processor,
+                "timeout": best_timeout
             }
 
-            print(f'status no health_checker: {status}')
             await redis_client.set(key, json.dumps(status))
             await asyncio.sleep(5)
         except Exception as e:
             print(e)
             await asyncio.sleep(5)
 
-def set_best_processor(default, fallback):
-    main_ok = not default['failing']
-    latency_ok = default['minResponseTime'] <= 100 or default['minResponseTime'] <= fallback['minResponseTime'] * 1.2
+def calculate_timeout(latency_ms: int) -> float:
+    timeout_sec = latency_ms / 1000.0
+    return max(MIN_TIMEOUT_SEC, min(timeout_sec, MAX_TIMEOUT_SEC))
 
-    if main_ok and latency_ok:
-        return 1
+def is_latency_acceptable(default_ms: int, fallback_ms: int) -> bool:
+    return (default_ms <= MAX_DEFAULT_LATENCY_MS or
+            default_ms <= fallback_ms * LATENCY_TOLERANCE_FACTOR)
 
-    if main_ok and not latency_ok:
-        return 2
+def select_best_processor(default: Dict[str, Any], fallback: Dict[str, Any]) -> Tuple[int, float]:
+    default_latency_ms = int(default.get('minResponseTime', 0))
+    fallback_latency_ms = int(fallback.get('minResponseTime', 0))
 
-    if not main_ok:
-        return 2
+    default_failing = bool(default.get('failing', False))
+    fallback_failing = bool(fallback.get('failing', False))
 
-    return 2
+    latency_acceptable = is_latency_acceptable(default_latency_ms, fallback_latency_ms)
+
+    if not default_failing and latency_acceptable:
+        return 1, calculate_timeout(default_latency_ms)
+
+    if not default_failing and not latency_acceptable:
+        if not fallback_failing:
+            return 2, calculate_timeout(fallback_latency_ms)
+
+        return 1, calculate_timeout(default_latency_ms)
+
+    if default_failing:
+        if not fallback_failing:
+            return 2, calculate_timeout(fallback_latency_ms)
+
+    return 1, MIN_TIMEOUT_SEC
