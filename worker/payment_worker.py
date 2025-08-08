@@ -17,8 +17,32 @@ from payment_processor import process_payment_in_default_processor, process_paym
 # CONCURRENT_REQUESTS = 6
 # MAX_BATCH_SIZE = 250
 
+# {
+# config:
+# NUM_WORKERS = 4
+# CONCURRENT_REQUESTS = 8
+# MAX_BATCH_SIZE = 250
+# resultado servido de testes
+# R$ 310.228,07
+# Bruto: R$ 332.827,50
+# R$ 0,00
+# 41.73ms
+# }
+
+# {
+# config:
+# NUM_WORKERS = 4
+# CONCURRENT_REQUESTS = 16
+# MAX_BATCH_SIZE = 250
+# resultado servido de testes
+# R$
+# Bruto:
+# R$
+#
+# }
+
 NUM_WORKERS = 4
-CONCURRENT_REQUESTS = 8
+CONCURRENT_REQUESTS = 16
 MAX_BATCH_SIZE = 250
 
 semaphores = {}
