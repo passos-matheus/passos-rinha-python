@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
-COPY worker/ .
+COPY . .
 
 RUN pip install -r requirements.txt
 

@@ -1,10 +1,6 @@
 fastapi
-pydantic
-tenacity
 redis
-pydantic-settings
 uvicorn
-nats-py
 psutil
 aiohttp
 orjson

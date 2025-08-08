@@ -1,8 +1,6 @@
 x-worker-templates:
   worker-backend: &worker-backend
-    build:
-      context: .
-      dockerfile: worker/Dockerfile
+    image: passosmatheus/python-backend-rinha-api-worker:1.0.1
     environment:
       - REDIS_HOST=redis-db
       - REDIS_PORT=6379
@@ -12,7 +10,7 @@ x-worker-templates:
       resources:
         limits:
           cpus: '0.6'
-          memory: '100MB'
+          memory: '110MB'
     sysctls:
       - net.core.somaxconn=65535
       - net.ipv4.tcp_tw_reuse=1
@@ -84,7 +82,7 @@ services:
       resources:
         limits:
           cpus: '0.18'
-          memory: '35MB'
+          memory: '65MB'
     sysctls:
       - net.core.somaxconn=131072
       - net.ipv4.tcp_tw_reuse=1

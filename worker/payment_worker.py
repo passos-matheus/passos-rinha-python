@@ -123,7 +123,6 @@ async def process_payment(payment_json: Any, best_processor: int, best_timeout: 
     except (KeyError, ValueError, TypeError):
         return "parse_error"
     except Exception as e:
-        print(e)
         await queue.put(payment_json)
 
 async def save_payment(payload, key):

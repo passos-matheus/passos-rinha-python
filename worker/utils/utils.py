@@ -90,7 +90,6 @@ async def calculate_summary(items: List[bytes], transaction_type: str) -> Dict[s
             transaction_count += 1
 
         except (ValueError, TypeError, orjson.JSONDecodeError) as e:
-            logger.debug(f"Erro ao processar transação: {e}")
             continue
 
     fee_rate = DEFAULT_FEE if transaction_type == 'default' else FALLBACK_FEE
@@ -111,6 +110,5 @@ async def get_redis_range(key: str, min_score: str, max_score: str) -> List[byte
             min=min_score,
             max=max_score
         )
-    except Exception as e:
-        logger.error(f"Erro ao buscar range no Redis: {e}")
+    except:
         return []

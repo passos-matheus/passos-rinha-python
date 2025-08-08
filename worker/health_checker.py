@@ -35,7 +35,6 @@ async def check_health_routine() -> Coroutine:
             await redis_client.set(key, json.dumps(status))
             await asyncio.sleep(5)
         except Exception as e:
-            print(e)
             await asyncio.sleep(5)
 
 def calculate_timeout(latency_ms: int) -> float:

@@ -53,7 +53,6 @@ async def create_payment(request: Request) -> JSONResponse:
         )
 
     except Exception as e:
-        logger.error(f"Erro ao processar payment: {e}")
         return JSONResponse(
             status_code=500,
             content={"error": str(e)}
@@ -92,10 +91,8 @@ async def get_payments_summary(request: Request) -> JSONResponse:
                 timeout=REDIS_TIMEOUT
             )
         except asyncio.TimeoutError:
-            logger.info("erro de timeout")
             raise
-    except Exception as e:
-        logger.error(f"Erro ao buscar resumo: {e}")
+    except:
         default_items, fallback_items = [], []
 
     default_summary = await calculate_summary(default_items, 'default')
@@ -120,7 +117,6 @@ async def purge_payments() -> JSONResponse:
         )
 
     except Exception as e:
-        logger.error(f"Erro ao purgar dados: {e}")
         raise HTTPException(
             status_code=500,
             detail={"error": f"Failed to purge data: {str(e)}"}
@@ -131,18 +127,18 @@ async def health_check() -> PlainTextResponse:
     return PlainTextResponse('OK\n')
 
 if __name__ == '__main__':
-    access_logger = logging.getLogger("uvicorn.access")
-    access_logger.addFilter(LogFilter())
+    logging.getLogger().setLevel(logging.CRITICAL)
+    logging.disable(logging.INFO)
 
     port = int(os.getenv('PORT', '8080'))
     host = '0.0.0.0'
-
-    logger.info(f"Iniciando servidor em {host}:{port}")
 
     uvicorn.run(
         'payment_api:app',
         host=host,
         port=port,
         reload=False,
-        log_level="info"
+        log_level="critical",
+        access_log=False,
+        use_colors=False
     )
