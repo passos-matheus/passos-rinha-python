@@ -1,6 +1,6 @@
 x-worker-templates:
   worker-backend: &worker-backend
-    image: passosmatheus/python-backend-rinha-api-worker:1.0.1
+    image: passosmatheus/python-backend-rinha-api-backend-v0:1.0.1
     environment:
       - REDIS_HOST=redis-db
       - REDIS_PORT=6379
@@ -47,7 +47,7 @@ services:
 
   worker-1:
     <<: *worker-backend
-    container_name: worker-1
+    container_name: backend-v0-1
     networks:
       - app
       - payment-processor
@@ -56,7 +56,7 @@ services:
 
   worker-2:
     <<: *worker-backend
-    container_name: worker-2
+    container_name: backend-v0-2
     networks:
       - app
       - payment-processor
