@@ -8,4 +8,4 @@ COPY worker/ .
 
 RUN pip install -r requirements.txt
 
-CMD ["python", "payment_worker.py"]
+CMD ["python", "payment_api.py"]

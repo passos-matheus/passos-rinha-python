@@ -1,0 +1,148 @@
+import os
+import uvicorn
+import asyncio
+import logging
+
+from setup import lifespan
+from payment_queue import queue
+from utils.redis_client import redis_client
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse, PlainTextResponse
+
+from utils.utils import (
+    logger,
+    get_redis_range,
+    calculate_summary,
+    LogFilter,
+    iso_to_timestamp,
+    REDIS_TIMEOUT
+)
+
+
+app = FastAPI(lifespan=lifespan)
+
+RESPONSE_MESSAGES = {
+    "accepted": {"status": "accepted"},
+    "purged": {"status": "purged"},
+    "empty_body": {"error": "empty body"},
+    "queue_full": {"error": "queue full"}
+}
+
+@app.post('/payments', status_code=201)
+async def create_payment(request: Request) -> JSONResponse:
+    try:
+        body = await request.body()
+
+        if not body:
+            raise HTTPException(
+                status_code=400,
+                detail=RESPONSE_MESSAGES["empty_body"]
+            )
+
+        queue.put_nowait(body)
+
+        return JSONResponse(
+            status_code=201,
+            content=RESPONSE_MESSAGES["accepted"]
+        )
+
+    except asyncio.QueueFull:
+        return JSONResponse(
+            status_code=503,
+            content=RESPONSE_MESSAGES["queue_full"]
+        )
+
+    except Exception as e:
+        logger.error(f"Erro ao processar payment: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
+
+
+@app.get('/payments-summary')
+async def get_payments_summary(request: Request) -> JSONResponse:
+    try:
+        from_ = request.query_params.get('from')
+        to = request.query_params.get('to')
+
+        min_score = '-inf'
+        max_score = '+inf'
+
+        if from_:
+            timestamp, success = iso_to_timestamp(from_)
+            if success and timestamp is not None:
+                min_score = timestamp
+
+        if to:
+            timestamp, success = iso_to_timestamp(to)
+            if success and timestamp is not None:
+                max_score = timestamp
+
+        default_task = asyncio.create_task(
+            get_redis_range('default', min_score, max_score)
+        )
+        fallback_task = asyncio.create_task(
+            get_redis_range('fallback', min_score, max_score)
+        )
+
+        try:
+            default_items, fallback_items = await asyncio.wait_for(
+                asyncio.gather(default_task, fallback_task),
+                timeout=REDIS_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            logger.info("erro de timeout")
+            raise
+    except Exception as e:
+        logger.error(f"Erro ao buscar resumo: {e}")
+        default_items, fallback_items = [], []
+
+    default_summary = await calculate_summary(default_items, 'default')
+    fallback_summary = await calculate_summary(fallback_items, 'fallback')
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            'default': default_summary,
+            'fallback': fallback_summary,
+        }
+    )
+
+@app.post('/purge-payments')
+async def purge_payments() -> JSONResponse:
+    try:
+        await redis_client.delete('default', 'fallback')
+
+        return JSONResponse(
+            status_code=200,
+            content=RESPONSE_MESSAGES["purged"]
+        )
+
+    except Exception as e:
+        logger.error(f"Erro ao purgar dados: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={"error": f"Failed to purge data: {str(e)}"}
+        )
+
+@app.get('/health')
+async def health_check() -> PlainTextResponse:
+    return PlainTextResponse('OK\n')
+
+if __name__ == '__main__':
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.addFilter(LogFilter())
+
+    port = int(os.getenv('PORT', '8080'))
+    host = '0.0.0.0'
+
+    logger.info(f"Iniciando servidor em {host}:{port}")
+
+    uvicorn.run(
+        'payment_api:app',
+        host=host,
+        port=port,
+        reload=False,
+        log_level="info"
+    )
