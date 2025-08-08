@@ -4,8 +4,10 @@ import time
 import asyncio
 
 from datetime import datetime
+from typing import Any
+
 from utils.redis_client import redis_client
-from payment_queue import consume_nats, queue
+from payment_queue import queue
 from health_checker import check_health_routine
 from HTTP.aiohtpp_session import cleanup_session
 from payment_processor import process_payment_in_default_processor, process_payment_in_fallback_processor
@@ -56,22 +58,27 @@ async def process_queue(worker_id):
 async def process_batch(batch, worker_id):
     semaphore = semaphores[worker_id]
 
-    best = 1
+    best_processor = 1
+    best_timeout = 5.1
+
     health_status = await redis_client.get('health_processors')
     if health_status:
         status = json.loads(health_status)
-        best = status["best"]
+        best_processor = status["best"]
+        # best_timeout = status["timeout"]
 
     async def run_with_semaphore(payment_json):
         async with semaphore:
-            return await process_payment(payment_json, best)
+            return await process_payment(payment_json, best_processor, best_timeout)
 
     tasks = [run_with_semaphore(payment) for payment in batch]
     await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def process_payment(payment_json, best):
+async def process_payment(payment_json: Any, best_processor: int, best_timeout: float):
     max_retries = 3
+    payment_processed = False
+    processor_used = None
 
     try:
         payment = json.loads(payment_json)
@@ -83,10 +90,18 @@ async def process_payment(payment_json, best):
 
         for attempt in range(max_retries):
             try:
-                if best == 1:
-                    await process_payment_in_default_processor(payload, 5.1)
+                if best_processor == 1:
+                    resp = await process_payment_in_default_processor(payload, best_timeout)
+                    if resp == "ignored":
+                        break
+                    processor_used = "default"
+                    payment_processed = True
                 else:
-                    await process_payment_in_fallback_processor(payload, 5.1)
+                    resp = await process_payment_in_fallback_processor(payload, best_timeout)
+                    if resp == "ignored":
+                        break
+                    processor_used = "fallback"
+                    payment_processed = True
 
                 break
 
@@ -102,11 +117,8 @@ async def process_payment(payment_json, best):
                 else:
                     raise
 
-        key = "default"
-        score = int(datetime.fromisoformat(payload['requestedAt']).timestamp() * 1000)
-        member = json.dumps(payload)
-
-        await redis_client.zadd(key, {member: score})
+        if payment_processed and processor_used:
+            await save_payment(payload, processor_used)
 
     except (KeyError, ValueError, TypeError):
         return "parse_error"
@@ -114,20 +126,36 @@ async def process_payment(payment_json, best):
         print(e)
         await queue.put(payment_json)
 
-async def main():
+async def save_payment(payload, key):
+    if not key:
+        raise Exception
+
+    correlation_id = payload.get('correlationId')
+    if not correlation_id:
+        raise Exception("correlationId is required")
+
+    processed_key = f"{key}:processed_ids"
+
+    is_processed = await redis_client.sismember(processed_key, correlation_id)
+    if is_processed:
+        return
+
+    pipeline = redis_client.pipeline()
+
+    score = int(datetime.fromisoformat(payload['requestedAt']).timestamp() * 1000)
+    member = json.dumps(payload)
+
+    pipeline.zadd(key, {member: score})
+    pipeline.sadd(processed_key, correlation_id)
+
+    await pipeline.execute()
+
+async def run_workers():
     try:
         consumers = [process_queue(i) for i in range(NUM_WORKERS)]
         await asyncio.gather(
-            consume_nats(),
             check_health_routine(),
             *consumers
         )
     finally:
         await cleanup_session()
-
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\nEncerrando...")
