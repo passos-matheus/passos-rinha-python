@@ -3,6 +3,8 @@ import uvicorn
 import asyncio
 import logging
 
+from starlette.responses import Response
+
 from setup import lifespan
 from payment_queue import queue
 from utils.redis_client import redis_client
@@ -29,7 +31,7 @@ RESPONSE_MESSAGES = {
 }
 
 @app.post('/payments', status_code=201)
-async def create_payment(request: Request) -> JSONResponse:
+async def create_payment(request: Request) -> Response:
     try:
         body = await request.body()
 
@@ -41,23 +43,11 @@ async def create_payment(request: Request) -> JSONResponse:
 
         queue.put_nowait(body)
 
-        return JSONResponse(
-            status_code=201,
-            content=RESPONSE_MESSAGES["accepted"]
-        )
-
+        return Response(status_code=201)
     except asyncio.QueueFull:
-        return JSONResponse(
-            status_code=503,
-            content=RESPONSE_MESSAGES["queue_full"]
-        )
-
+        return Response(status_code=503)
     except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e)}
-        )
-
+        return Response(status_code=500, content=e)
 
 @app.get('/payments-summary')
 async def get_payments_summary(request: Request) -> JSONResponse:
@@ -140,5 +130,8 @@ if __name__ == '__main__':
         reload=False,
         log_level="critical",
         access_log=False,
-        use_colors=False
+        use_colors=False,
+        loop="uvloop",
+        http="httptools",
+        backlog=2048,
     )
