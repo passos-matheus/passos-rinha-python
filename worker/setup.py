@@ -23,9 +23,9 @@ async def lifespan(app) -> AsyncGenerator[None, None]:
         await redis_client.initialize()
         await redis_client.ping()
 
-        worker_task = asyncio.create_task(
-            run_workers()
-        )
+        # worker_task = asyncio.create_task(
+        #     run_workers()
+        # )
 
         await asyncio.sleep(0.15)
         yield
