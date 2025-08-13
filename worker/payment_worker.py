@@ -42,7 +42,7 @@ from payment_processor import process_payment_in_default_processor, process_paym
 # }
 
 NUM_WORKERS = 4
-CONCURRENT_REQUESTS = 16
+CONCURRENT_REQUESTS = 8
 MAX_BATCH_SIZE = 250
 
 semaphores = {}
@@ -76,6 +76,7 @@ async def process_queue(worker_id):
                 break
 
         await process_batch(batch, worker_id)
+        # await asyncio.sleep(0)
         for _ in batch:
             queue.task_done()
 
@@ -88,8 +89,11 @@ async def process_batch(batch, worker_id):
     health_status = await redis_client.get('health_processors')
     if health_status:
         status = json.loads(health_status)
-        best_processor = status["best"]
+        # best_processor = status["best"]
         # best_timeout = status["timeout"] + 0.05
+
+        if status['default']['failing']:
+            await asyncio.sleep(5)
 
     async def run_with_semaphore(payment_json):
         async with semaphore:

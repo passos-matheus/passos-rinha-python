@@ -41,8 +41,7 @@ async def create_payment(request: Request) -> Response:
                 detail=RESPONSE_MESSAGES["empty_body"]
             )
 
-        queue.put_nowait(body)
-
+        asyncio.create_task(queue.put(body))
         return Response(status_code=201)
     except asyncio.QueueFull:
         return Response(status_code=503)
