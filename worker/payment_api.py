@@ -8,7 +8,7 @@ from starlette.responses import Response
 from setup import lifespan
 from payment_queue import queue
 from utils.redis_client import redis_client
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from utils.utils import (
@@ -31,7 +31,7 @@ RESPONSE_MESSAGES = {
 }
 
 @app.post('/payments', status_code=201)
-async def create_payment(request: Request) -> Response:
+async def create_payment(request: Request, bg_tasker: BackgroundTasks) -> Response:
     try:
         body = await request.body()
 
@@ -41,7 +41,7 @@ async def create_payment(request: Request) -> Response:
                 detail=RESPONSE_MESSAGES["empty_body"]
             )
 
-        asyncio.create_task(queue.put(body))
+        bg_tasker.add_task(queue.put, body)
         return Response(status_code=201)
     except asyncio.QueueFull:
         return Response(status_code=503)
