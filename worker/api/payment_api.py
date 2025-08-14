@@ -3,14 +3,11 @@ import uvicorn
 import asyncio
 import logging
 
-from starlette.responses import Response
-
 from setup import lifespan
-from payment_queue import queue
+from starlette.responses import Response
 from utils.redis_client import redis_client
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse
-
 from utils.utils import (
     logger,
     get_redis_range,
@@ -27,11 +24,12 @@ RESPONSE_MESSAGES = {
     "accepted": {"status": "accepted"},
     "purged": {"status": "purged"},
     "empty_body": {"error": "empty body"},
-    "queue_full": {"error": "queue full"}
+    "queue_full": {"error": "queue full"},
+    "tcp_error": {"error": "worker unavailable"}
 }
 
 @app.post('/payments', status_code=201)
-async def create_payment(request: Request, bg_tasker: BackgroundTasks) -> Response:
+async def create_payment(request: Request) -> Response:
     try:
         body = await request.body()
 
@@ -41,12 +39,17 @@ async def create_payment(request: Request, bg_tasker: BackgroundTasks) -> Respon
                 detail=RESPONSE_MESSAGES["empty_body"]
             )
 
-        bg_tasker.add_task(queue.put, body)
-        return Response(status_code=201)
-    except asyncio.QueueFull:
-        return Response(status_code=503)
+        tcp_client = request.app.state.tcp_queue_client
+        result = await tcp_client.send_payment(body)
+        if result['status'] == 'success':
+            return Response(status_code=201)
+        else:
+            logger.error(f"TCP queue error: {result}")
+            return Response(status_code=503)
+
     except Exception as e:
-        return Response(status_code=500, content=e)
+        logger.error(f"Payment endpoint error: {e}")
+        return Response(status_code=500)
 
 @app.get('/payments-summary')
 async def get_payments_summary(request: Request) -> JSONResponse:
