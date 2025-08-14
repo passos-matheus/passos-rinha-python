@@ -1,9 +1,0 @@
-fastapi
-redis
-uvicorn
-psutil
-aiohttp
-orjson
-uvloop
-httptools
-aioredis
