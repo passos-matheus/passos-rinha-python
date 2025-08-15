@@ -3,6 +3,7 @@ import uvicorn
 import asyncio
 import logging
 
+from TCP.tcp_payment_queue_client import TCPQueueClient
 from setup import lifespan
 from starlette.responses import Response
 from utils.redis_client import redis_client
@@ -39,16 +40,10 @@ async def create_payment(request: Request) -> Response:
                 detail=RESPONSE_MESSAGES["empty_body"]
             )
 
-        tcp_client = request.app.state.tcp_queue_client
-        result = await tcp_client.send_payment(body)
-        if result['status'] == 'success':
-            return Response(status_code=201)
-        else:
-            logger.error(f"TCP queue error: {result}")
-            return Response(status_code=503)
-
+        tcp_client: TCPQueueClient = request.app.state.tcp_queue_client
+        await tcp_client.send_payment(body)
+        return Response(status_code=201)
     except Exception as e:
-        logger.error(f"Payment endpoint error: {e}")
         return Response(status_code=500)
 
 @app.get('/payments-summary')

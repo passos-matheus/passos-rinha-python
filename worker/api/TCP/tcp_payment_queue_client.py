@@ -1,25 +1,18 @@
 import json
 import socket
 import asyncio
-import threading
-
 from typing import Dict, Any, Union
 
 
 class TCPQueueClient:
-
-    def __init__(self, host='worker-3', port=8888, timeout=5.0):
+    def __init__(self, host='worker-3', port=8888, timeout=2.0):
         self.host = host
         self.port = port
         self.timeout = timeout
-        self.connection_pool = []
-        self.pool_lock = threading.Lock()
-        self.max_pool_size = 10
 
     async def send_payment(self, payment_data: Union[bytes, dict, str]) -> Dict[str, Any]:
         try:
             payment_json = self._prepare_payment_data(payment_data)
-
             message = {
                 'action': 'push',
                 'data': payment_json
@@ -41,10 +34,9 @@ class TCPQueueClient:
             elif isinstance(payment_data, dict):
                 return payment_data
             else:
-                raise ValueError(f"type do payment não suportado: {type(payment_data)}")
-
+                raise ValueError(f"Unsupported type: {type(payment_data)}")
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            raise ValueError(f"Invalid payment data format: {e}")
+            raise ValueError(f"Invalid payment data: {e}")
 
     async def get_stats(self) -> Dict[str, Any]:
         message = {'action': 'stats'}
@@ -75,9 +67,10 @@ class TCPQueueClient:
                     return json.loads(response_line.decode('utf-8'))
                 else:
                     return {'status': 'error', 'message': 'no response'}
+
         except socket.timeout:
             return {'status': 'error', 'message': 'TCP timeout'}
         except ConnectionRefusedError:
-            return {'status': 'error', 'message': 'nao encontrou o container do worker'}
+            return {'status': 'error', 'message': 'worker not found'}
         except Exception as e:
             return {'status': 'error', 'message': str(e)}

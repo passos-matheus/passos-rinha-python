@@ -2,7 +2,6 @@ import json
 import socket
 import asyncio
 import threading
-
 from typing import Optional
 
 
@@ -23,7 +22,7 @@ class TCPQueueServer:
         try:
             self.event_loop = asyncio.get_running_loop()
         except RuntimeError:
-            raise RuntimeError("TCPQueueServer nao foi iniciando num async context")
+            raise RuntimeError("TCPQueueServer deve ser iniciado em contexto async")
 
         tcp_thread = threading.Thread(target=self._tcp_server, daemon=True)
         tcp_thread.start()
@@ -48,10 +47,10 @@ class TCPQueueServer:
 
                 except Exception as e:
                     if self.running:
-                        raise e
+                        pass
 
         except Exception as e:
-            raise e
+            pass
         finally:
             server_socket.close()
 
@@ -70,7 +69,6 @@ class TCPQueueServer:
                             break
 
                         buffer += data
-
                         while b'\n' in buffer:
                             line, buffer = buffer.split(b'\n', 1)
                             if line:
@@ -80,11 +78,11 @@ class TCPQueueServer:
 
                     except ConnectionResetError:
                         break
-                    except:
+                    except Exception as e:
                         break
 
         except Exception as e:
-            raise e
+            pass
         finally:
             if client_socket in self.connections:
                 self.connections.remove(client_socket)
@@ -97,7 +95,6 @@ class TCPQueueServer:
 
             if action == 'push':
                 payment_data = data.get('data')
-
                 payment_json = json.dumps(payment_data)
 
                 if self.event_loop and not self.event_loop.is_closed():
@@ -108,9 +105,7 @@ class TCPQueueServer:
                         )
 
                         future.result(timeout=1.0)
-
                         self.stats['tasks_received'] += 1
-
                         return {
                             'status': 'success',
                             'message': 'Payment queued',
@@ -122,7 +117,7 @@ class TCPQueueServer:
                     except Exception as e:
                         return {'status': 'error', 'message': f'Queue error: {e}'}
                 else:
-                    return {'status': 'error', 'message': 'event loop nao encontrado'}
+                    return {'status': 'error', 'message': 'Event loop nao acessível'}
 
             elif action == 'stats':
                 return {
@@ -133,16 +128,15 @@ class TCPQueueServer:
                 }
 
             else:
-                return {'status': 'error', 'message': f'{action}'}
+                return {'status': 'error', 'message': f'action invalida: {action}'}
 
-        except json.JSONDecodeError as e:
-            return {'status': 'error', 'message': 'json quebrado!'}
+        except json.JSONDecodeError:
+            return {'status': 'error', 'message': 'JSON invalido'}
         except Exception as e:
             return {'status': 'error', 'message': str(e)}
 
     def stop(self):
         self.running = False
-
         for conn in self.connections:
             try:
                 conn.close()
