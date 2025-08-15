@@ -34,10 +34,10 @@ async def process_queue(worker_id, _queue, tcp_client):
 async def process_batch(batch, worker_id, _queue, tcp_client):
     semaphore = semaphores[worker_id]
 
-    decoded_batch = [item.decode("utf-8") for item in batch]
-    batch_json = json.dumps(decoded_batch)
+    decoded_batch = [json.loads(item.decode("utf-8")) for item in batch]
+    print(decoded_batch)
     async with semaphore:
-        return await tcp_client.send_batch_payments(batch_json)
+        return await tcp_client.send_batch_payments(decoded_batch)
 
 
 async def run_workers(tcp_client: TCPQueueClient, queue: asyncio.Queue):

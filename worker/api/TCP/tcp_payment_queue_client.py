@@ -28,7 +28,8 @@ class TCPQueueClient:
             except Exception as e:
                 return {'status': 'error', 'message': str(e)}
 
-    def _prepare_payment_data(self, payment_data: Union[bytes, dict, str]) -> dict:
+    def _prepare_payment_data(self, payment_data: Union[bytes, dict, str, list]) -> Union[dict, list]:
+        print(f"[TCPQueueClient] _prepare_payment_data called with type: {type(payment_data)}")
         try:
             if isinstance(payment_data, bytes):
                 payment_str = payment_data.decode('utf-8')
@@ -37,9 +38,12 @@ class TCPQueueClient:
                 return json.loads(payment_data)
             elif isinstance(payment_data, dict):
                 return payment_data
+            elif isinstance(payment_data, list):
+                return payment_data
             else:
                 raise ValueError(f"Unsupported type: {type(payment_data)}")
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            print(f"[TCPQueueClient] JSON decode/prep error: {e}")
             raise ValueError(f"Invalid payment data: {e}")
 
     async def get_stats(self) -> Dict[str, Any]:

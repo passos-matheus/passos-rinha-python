@@ -78,7 +78,7 @@ class TCPQueueServer:
 
                 try:
                     for p in payment_data:
-                        self.payment_queue.put_nowait(json.dumps(p))
+                        self.payment_queue.put_nowait(p)
                         self.stats['tasks_received'] += 1
                     return b'{"status":"success","message":"Payment queued"}\n'
                 except asyncio.QueueFull:
@@ -96,9 +96,11 @@ class TCPQueueServer:
             else:
                 return b'{"status":"error","message":"action invalida"}\n'
 
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print(e)
             return b'{"status":"error","message":"JSON invalido"}\n'
-        except Exception:
+        except Exception as e:
+            print(e)
             return b'{"status":"error","message":"error"}\n'
 
     async def stop(self):

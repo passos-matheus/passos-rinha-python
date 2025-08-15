@@ -117,9 +117,9 @@ async def process_batch(batch, worker_id, _queue):
         if status['default']['failing']:
             await asyncio.sleep(5)
 
-    async def run_with_semaphore(payment_json):
+    async def run_with_semaphore(payment):
         async with semaphore:
-            return await process_payment(payment_json, best_processor, best_timeout, _queue)
+            return await process_payment(payment, best_processor, best_timeout, _queue)
 
     tasks = [run_with_semaphore(payment) for payment in batch]
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -134,19 +134,19 @@ async def process_batch(batch, worker_id, _queue):
         await batch_save_payments(payments_to_save)
 
 
-async def process_payment(payment_json: Any, best_processor: int, best_timeout: float, _queue):
-    print(f"executou o process_payment: {payment_json}")
+async def process_payment(payment: Any, best_processor: int, best_timeout: float, _queue):
+    print(f"executou o process_payment: {payment}")
     max_retries = 3
     payment_processed = False
     processor_used = None
 
     try:
-        payment = json.loads(payment_json)
         payload = {
             "correlationId": str(payment["correlationId"]),
             "amount": payment["amount"],
             "requestedAt": cached_datetime()
         }
+        print(payload)
 
         for attempt in range(max_retries):
             try:
@@ -173,7 +173,7 @@ async def process_payment(payment_json: Any, best_processor: int, best_timeout: 
                     await asyncio.sleep(0.1 * (attempt + 1))
                     continue
                 elif is_retryable and attempt == max_retries - 1:
-                    await _queue.put(payment_json)
+                    await _queue.put(payment)
                 else:
                     raise
 
@@ -185,10 +185,11 @@ async def process_payment(payment_json: Any, best_processor: int, best_timeout: 
                 }
             }
 
-    except (KeyError, ValueError, TypeError):
+    except (KeyError, ValueError, TypeError) as e:
+        print(e)
         return "parse_error"
     except Exception as e:
-        await _queue.put(payment_json)
+        await _queue.put(payment)
 
 
 async def batch_save_payments(payments_data: List[Dict]):
