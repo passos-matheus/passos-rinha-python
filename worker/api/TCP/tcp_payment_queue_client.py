@@ -6,7 +6,7 @@ from collections import deque
 
 
 class TCPQueueClient:
-    def __init__(self, host='worker-3', port=8888, timeout=2.0, pool_size=100):
+    def __init__(self, host='worker-3', port=8888, timeout=2.0, pool_size=16):
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -14,7 +14,7 @@ class TCPQueueClient:
         self.pool = deque(maxlen=pool_size)
         self.pool_lock = asyncio.Lock()
         self._closing = False
-        self._semaphore = asyncio.Semaphore(100)
+        self._semaphore = asyncio.Semaphore(8)
 
     async def send_batch_payments(self, payment_data: Union[bytes, dict, str]) -> Dict[str, Any]:
         async with self._semaphore:

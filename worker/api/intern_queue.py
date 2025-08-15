@@ -21,7 +21,7 @@ async def process_queue(worker_id, _queue, tcp_client):
 
         while len(batch) < MAX_BATCH_SIZE:
             try:
-                item = await asyncio.wait_for(_queue.get(), timeout=0.008)
+                item = await asyncio.wait_for(_queue.get(), timeout=0.025)
                 batch.append(item)
             except asyncio.TimeoutError:
                 break
@@ -33,10 +33,8 @@ async def process_queue(worker_id, _queue, tcp_client):
 
 async def process_batch(batch, worker_id, _queue, tcp_client):
     # semaphore = semaphores[worker_id]
-
-    # decoded_batch = [json.loads(item.decode("utf-8")) for item in batch]
-    # return await tcp_client.send_batch_payments(decoded_batch)
-    return
+    decoded_batch = [json.loads(item.decode("utf-8")) for item in batch]
+    return await tcp_client.send_batch_payments(decoded_batch)
 
 
 async def run_workers(tcp_client: TCPQueueClient, queue: asyncio.Queue):
