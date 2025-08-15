@@ -77,8 +77,9 @@ class TCPQueueServer:
                 payment_data = data.get('data')
 
                 try:
-                    self.payment_queue.put_nowait(json.dumps(payment_data))
-                    self.stats['tasks_received'] += 1
+                    for p in payment_data:
+                        self.payment_queue.put_nowait(json.dumps(p))
+                        self.stats['tasks_received'] += 1
                     return b'{"status":"success","message":"Payment queued"}\n'
                 except asyncio.QueueFull:
                     return b'{"status":"error","message":"Queue full"}\n'
