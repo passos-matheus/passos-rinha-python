@@ -14,7 +14,7 @@ class TCPQueueClient:
         self.pool = deque(maxlen=pool_size)
         self.pool_lock = asyncio.Lock()
         self._closing = False
-        self._semaphore = asyncio.Semaphore(300)
+        self._semaphore = asyncio.Semaphore(100)
 
     async def send_batch_payments(self, payment_data: Union[bytes, dict, str]) -> Dict[str, Any]:
         async with self._semaphore:
@@ -29,7 +29,6 @@ class TCPQueueClient:
                 return {'status': 'error', 'message': str(e)}
 
     def _prepare_payment_data(self, payment_data: Union[bytes, dict, str, list]) -> Union[dict, list]:
-        print(f"[TCPQueueClient] _prepare_payment_data called with type: {type(payment_data)}")
         try:
             if isinstance(payment_data, bytes):
                 payment_str = payment_data.decode('utf-8')

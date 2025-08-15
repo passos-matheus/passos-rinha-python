@@ -32,16 +32,16 @@ RESPONSE_MESSAGES = {
 @app.post('/payments', status_code=201)
 async def create_payment(request: Request) -> Response:
     try:
-        body = await request.body()
-
-        if not body:
-            raise HTTPException(
-                status_code=400,
-                detail=RESPONSE_MESSAGES["empty_body"]
-            )
-
-        _queue: asyncio.Queue = request.app.state.queue
-        _queue.put_nowait(body)
+        # body = await request.body()
+        #
+        # if not body:
+        #     raise HTTPException(
+        #         status_code=400,
+        #         detail=RESPONSE_MESSAGES["empty_body"]
+        #     )
+        #
+        # _queue: asyncio.Queue = request.app.state.queue
+        # _queue.put_nowait(body)
         return Response(status_code=201)
     except Exception as e:
         return Response(status_code=500)
@@ -114,8 +114,8 @@ async def health_check() -> PlainTextResponse:
     return PlainTextResponse('OK\n')
 
 if __name__ == '__main__':
-    # logging.getLogger().setLevel(logging.CRITICAL)
-    # logging.disable(logging.INFO)
+    logging.getLogger().setLevel(logging.CRITICAL)
+    logging.disable(logging.INFO)
 
     port = int(os.getenv('PORT', '8080'))
     host = '0.0.0.0'

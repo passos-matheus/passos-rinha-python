@@ -135,7 +135,6 @@ async def process_batch(batch, worker_id, _queue):
 
 
 async def process_payment(payment: Any, best_processor: int, best_timeout: float, _queue):
-    print(f"executou o process_payment: {payment}")
     max_retries = 3
     payment_processed = False
     processor_used = None
@@ -146,7 +145,6 @@ async def process_payment(payment: Any, best_processor: int, best_timeout: float
             "amount": payment["amount"],
             "requestedAt": cached_datetime()
         }
-        print(payload)
 
         for attempt in range(max_retries):
             try:
