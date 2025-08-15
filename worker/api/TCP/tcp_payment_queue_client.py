@@ -1,28 +1,32 @@
 import json
-import socket
 import asyncio
-from typing import Dict, Any, Union
+import socket
+from typing import Dict, Any, Union, Optional
+from collections import deque
 
 
 class TCPQueueClient:
-    def __init__(self, host='worker-3', port=8888, timeout=2.0):
+    def __init__(self, host='worker-3', port=8888, timeout=2.0, pool_size=100):
         self.host = host
         self.port = port
         self.timeout = timeout
+        self.pool_size = pool_size
+        self.pool = deque(maxlen=pool_size)
+        self.pool_lock = asyncio.Lock()
+        self._closing = False
+        self._semaphore = asyncio.Semaphore(300)
 
-    async def send_payment(self, payment_data: Union[bytes, dict, str]) -> Dict[str, Any]:
-        try:
-            payment_json = self._prepare_payment_data(payment_data)
-            message = {
-                'action': 'push',
-                'data': payment_json
-            }
-
-            result = await self._send_message_async(message)
-            return result
-
-        except Exception as e:
-            return {'status': 'error', 'message': str(e)}
+    async def send_batch_payments(self, payment_data: Union[bytes, dict, str]) -> Dict[str, Any]:
+        async with self._semaphore:
+            try:
+                payment_json = self._prepare_payment_data(payment_data)
+                message = {
+                    'action': 'push',
+                    'data': payment_json
+                }
+                return await self._send_message_async(message)
+            except Exception as e:
+                return {'status': 'error', 'message': str(e)}
 
     def _prepare_payment_data(self, payment_data: Union[bytes, dict, str]) -> dict:
         try:
@@ -42,35 +46,80 @@ class TCPQueueClient:
         message = {'action': 'stats'}
         return await self._send_message_async(message)
 
-    async def _send_message_async(self, message: Dict[str, Any]) -> Dict[str, Any]:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._send_message_sync, message)
-
-    def _send_message_sync(self, message: Dict[str, Any]) -> Dict[str, Any]:
+    async def _create_connection(self) -> tuple[Optional[asyncio.StreamReader], Optional[asyncio.StreamWriter]]:
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(self.timeout)
-                sock.connect((self.host, self.port))
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self.host, self.port, limit=1048576),
+                timeout=self.timeout
+            )
 
-                message_str = json.dumps(message) + '\n'
-                sock.send(message_str.encode('utf-8'))
+            sock = writer.get_extra_info('socket')
+            if sock:
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1048576)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1048576)
 
-                buffer = b""
-                while b'\n' not in buffer:
-                    data = sock.recv(4096)
-                    if not data:
-                        break
-                    buffer += data
+            return reader, writer
+        except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+            return None, None
 
-                if b'\n' in buffer:
-                    response_line, _ = buffer.split(b'\n', 1)
-                    return json.loads(response_line.decode('utf-8'))
-                else:
-                    return {'status': 'error', 'message': 'no response'}
+    async def _get_connection(self) -> tuple[Optional[asyncio.StreamReader], Optional[asyncio.StreamWriter]]:
+        async with self.pool_lock:
+            while self.pool and not self._closing:
+                reader, writer = self.pool.popleft()
+                if not writer.is_closing():
+                    return reader, writer
+                writer.close()
 
-        except socket.timeout:
+        if self._closing:
+            return None, None
+
+        return await self._create_connection()
+
+    async def _return_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        if not self._closing and not writer.is_closing():
+            async with self.pool_lock:
+                if len(self.pool) < self.pool_size:
+                    self.pool.append((reader, writer))
+                    return
+        writer.close()
+
+    async def _send_message_async(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        reader, writer = await self._get_connection()
+        if not reader or not writer:
+            return {'status': 'error', 'message': 'connection failed'}
+
+        try:
+            message_bytes = (json.dumps(message) + '\n').encode('utf-8')
+            writer.write(message_bytes)
+            await writer.drain()
+
+            response = await asyncio.wait_for(
+                reader.readline(),
+                timeout=self.timeout
+            )
+
+            if not response:
+                writer.close()
+                return {'status': 'error', 'message': 'no response'}
+
+            result = json.loads(response)
+            await self._return_connection(reader, writer)
+            return result
+
+        except asyncio.TimeoutError:
+            writer.close()
             return {'status': 'error', 'message': 'TCP timeout'}
-        except ConnectionRefusedError:
-            return {'status': 'error', 'message': 'worker not found'}
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            writer.close()
+            return {'status': 'error', 'message': 'invalid response'}
         except Exception as e:
+            writer.close()
             return {'status': 'error', 'message': str(e)}
+
+    async def close(self):
+        self._closing = True
+        async with self.pool_lock:
+            while self.pool:
+                reader, writer = self.pool.popleft()
+                writer.close()

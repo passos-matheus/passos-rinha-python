@@ -248,8 +248,8 @@ async def run_workers():
         init_redis_scripts(redis_client)
 
         queue = asyncio.Queue()
-        tcp_server = TCPQueueServer(queue)
-        tcp_server.start()
+        server = TCPQueueServer(queue)
+        await server.start()
 
         consumers = [process_queue(i, queue) for i in range(NUM_WORKERS)]
 

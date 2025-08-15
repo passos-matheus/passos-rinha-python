@@ -40,8 +40,8 @@ async def create_payment(request: Request) -> Response:
                 detail=RESPONSE_MESSAGES["empty_body"]
             )
 
-        tcp_client: TCPQueueClient = request.app.state.tcp_queue_client
-        await tcp_client.send_payment(body)
+        _queue: asyncio.Queue = request.app.state.queue
+        _queue.put_nowait(body)
         return Response(status_code=201)
     except Exception as e:
         return Response(status_code=500)
@@ -114,8 +114,8 @@ async def health_check() -> PlainTextResponse:
     return PlainTextResponse('OK\n')
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(logging.CRITICAL)
-    logging.disable(logging.INFO)
+    # logging.getLogger().setLevel(logging.CRITICAL)
+    # logging.disable(logging.INFO)
 
     port = int(os.getenv('PORT', '8080'))
     host = '0.0.0.0'

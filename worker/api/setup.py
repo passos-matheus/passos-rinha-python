@@ -6,7 +6,7 @@ from typing import AsyncGenerator, Optional
 
 from utils.redis_client import redis_client
 from TCP.tcp_payment_queue_client import TCPQueueClient
-
+from intern_queue import run_workers
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -18,6 +18,8 @@ shutdown_event = asyncio.Event()
 @asynccontextmanager
 async def lifespan(app) -> AsyncGenerator[None, None]:
     try:
+        batch_process_queue = asyncio.Queue(maxsize=50000)
+
         await redis_client.initialize()
         await redis_client.ping()
 
@@ -26,8 +28,7 @@ async def lifespan(app) -> AsyncGenerator[None, None]:
             port=int(os.getenv('TCP_QUEUE_PORT', '8888')),
             timeout=float(os.getenv('TCP_QUEUE_TIMEOUT', '5.0'))
         )
-
-        app.state.tcp_queue_client = tcp_client
+        app.state.queue = batch_process_queue
 
         try:
             stats = await tcp_client.get_stats()
@@ -37,6 +38,8 @@ async def lifespan(app) -> AsyncGenerator[None, None]:
                 logger.warning(f"erro no socket: {stats}")
         except Exception as e:
             logger.error(f"Erro pra conectar no socket: {e}")
+
+        asyncio.create_task(run_workers(tcp_client, batch_process_queue))
 
         await asyncio.sleep(0.15)
         yield
