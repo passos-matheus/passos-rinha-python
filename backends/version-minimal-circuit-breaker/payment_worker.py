@@ -101,7 +101,7 @@ async def process_batch(batch, worker_id):
             status = json.loads(health_status)
 
         best_processor = status["best"]
-        best_timeout = status["timeout"] + 0.3
+        # best_timeout = status["timeout"] + 0.3
 
 
     async def run_with_semaphore(payment_json):
