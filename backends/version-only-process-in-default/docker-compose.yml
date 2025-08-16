@@ -1,6 +1,6 @@
 x-worker-templates:
   worker-backend: &worker-backend
-    image: passosmatheus/python-agressive-adaptive-timeout
+    image: passosmatheus/python-process-only-in-default
     environment:
       - REDIS_HOST=redis-db
       - REDIS_PORT=6379
