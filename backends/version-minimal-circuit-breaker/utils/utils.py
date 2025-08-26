@@ -69,7 +69,7 @@ def iso_to_timestamp(date_string: str) -> Tuple[Optional[str], bool]:
 def round_to_cents(value: float) -> float:
     return math.floor(value * 100 + 0.5) / 100.0
 
-async def calculate_summary(items: List[bytes], transaction_type: str) -> Dict[str, Any]:
+def calculate_summary(items: List[bytes], transaction_type: str) -> Dict[str, Any]:
     total_amount = 0.0
     transaction_count = 0
 

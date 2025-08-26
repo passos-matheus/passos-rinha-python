@@ -33,7 +33,7 @@ RESPONSE_MESSAGES = {
 @app.post('/payments', status_code=201)
 async def create_payment(request: Request) -> Response:
     try:
-        body = await request.body()
+        body = await asyncio.create_task(request.body())
 
         if not body:
             raise HTTPException(
@@ -75,18 +75,14 @@ async def get_payments_summary(request: Request) -> JSONResponse:
             get_redis_range('fallback', min_score, max_score)
         )
 
-        try:
-            default_items, fallback_items = await asyncio.wait_for(
-                asyncio.gather(default_task, fallback_task),
-                timeout=REDIS_TIMEOUT
-            )
-        except asyncio.TimeoutError:
-            raise
+        _summary_tasks = [default_task, fallback_task]
+
+        default_items, fallback_items = await asyncio.gather(*_summary_tasks)
     except:
         default_items, fallback_items = [], []
 
-    default_summary = await calculate_summary(default_items, 'default')
-    fallback_summary = await calculate_summary(fallback_items, 'fallback')
+    default_summary = calculate_summary(default_items, 'default')
+    fallback_summary = calculate_summary(fallback_items, 'fallback')
 
     return JSONResponse(
         status_code=200,
